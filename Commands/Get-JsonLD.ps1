@@ -22,10 +22,15 @@ function Get-JsonLD {
     # The URL that may contain JSON-LD data
     [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
     [Uri]
-    $Url
+    $Url,
+
+    # If set, will force the request to be made even if the URL has already been cached.
+    [switch]
+    $Force
     )
 
     begin {
+        # Create a pattern to match the JSON-LD script tag
         $linkedDataRegex = [Regex]::new(@'
 (?<HTML_LinkedData>
 <script                                       # Match <script tag
@@ -39,10 +44,21 @@ application/ld\+json                          # The type that indicates linked d
 (?<JsonContent>(?:.|\s){0,}?(?=\z|</script>)) # Anything until the end tag is JSONContent
 )        
 '@, 'IgnoreCase,IgnorePatternWhitespace','00:00:00.1')
+
+        # Initialize the cache for JSON-LD requests
+        if (-not $script:JsonLDRequestCache) {
+            $script:JsonLDRequestCache = [Ordered]@{}
+        }
     }
 
     process {        
-        $restResponse = Invoke-RestMethod -Uri $Url
+        $restResponse = 
+            if ($Force -or -not $script:JsonLDRequestCache[$url]) {
+                $script:JsonLDRequestCache[$url] = Invoke-RestMethod -Uri $Url
+                $script:JsonLDRequestCache[$url]
+            } else {
+                $script:JsonLDRequestCache[$url]
+            }
         foreach ($match in $linkedDataRegex.Matches("$restResponse")) {
             foreach ($jsonObject in 
                 $match.Groups['JsonContent'].Value | 
