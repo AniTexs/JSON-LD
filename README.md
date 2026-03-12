@@ -15,7 +15,7 @@ This information can be useful in any number of fun and useful PowerShell scenar
 For example, let's get information about a movie.
 
 ~~~PowerShell
-Get-JsonLD https://www.imdb.com/title/tt0211915/
+Get-JsonLD -Url https://letterboxd.com/film/amelie/
 ~~~
 
 Let's take things a step further, and get the information we can know about any movie:
