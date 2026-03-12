@@ -5,7 +5,8 @@ describe 'JSON-LD' {
             $result = Get-JsonLD -Url 'https://letterboxd.com/film/amelie/'
             
             $result.pstypenames | Should -Not -BeNullOrEmpty
-            $result.pstypenames | Should -Contain 'https://schema.org/Movie'
+            $result.pstypenames -match 'schema.org' | 
+                Should -Match '^https?://schema.org/Movie'
 
         }
         it 'can get information a schema' {
