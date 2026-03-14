@@ -1,0 +1,95 @@
+
+param($graph = $this)
+
+if (-not $graph.'@graph') {
+    if ($graph.'@context' -is [string] -and 
+        $graph.'@type' -is [string]) {
+        $gotGraph = Get-JsonLD -Url (
+            $graph.'@context', $graph.'@type' -join '/' -replace '^http:', 'https:'
+        )
+        if ($gotGraph.'@graph') {
+            $graph = $gotGraph
+        }
+    }
+}
+
+if (-not $graph.'@graph') { return }
+
+$graphTypes = $graph.'@graph' | Group-Object '@type' -AsHashTable
+
+$classes = $graphTypes['rdfs:class']
+if (-not $classes) {
+    return
+}
+
+$baseType = $classes |
+    Where-Object 'rdfs:label' -eq 'thing'
+
+if (-not $baseType) {
+    return
+}
+
+$ClassHierarchy = @(
+    $baseType 
+    do {
+        $parentType = $classes |
+            Where-Object {
+                $_.'rdfs:subClassOf'.'@id' -eq $baseType.'@id'
+            }
+        if ($parentType) {
+            $parentType
+            $baseType = $parentType
+        }
+    } while ($parentType)
+)
+
+if (-not $ClassHierarchy) { return }
+
+$classInfo = $ClassHierarchy[-1]
+
+$jsonSchema = [Ordered]@{
+    '$id' = "`$$($classInfo.'@id' -replace 'schema:', 'schema.org/')"
+    title = $($classInfo.'@id' -replace 'schema:', 'https://schema.org/')
+    description = $classInfo.'rdfs:comment'
+    properties = [Ordered]@{}
+}
+
+foreach ($rdfProperty in $graphTypes['rdf:property']) {
+    $propertyInfo = [Ordered]@{}
+    switch -regex ($rdfProperty.'@id') {
+        '(?>date|time)$' {
+            $propertyInfo['type'] = 'string'
+            $propertyInfo['format'] = 'date-time'
+        }        
+        'url$' {
+            $propertyInfo['type'] = 'string'
+            $propertyInfo['format'] = 'url'
+        }
+        '(?>name|description)$' {
+            $propertyInfo['type'] = 'string'
+        }        
+        default {
+            $propertyInfo['type'] = 'object'
+        }
+    }
+    if (@($rdfProperty.'schema:rangeIncludes').Count -eq 1) {
+        switch ($rdfProperty.'schema:rangeIncludes') {
+            schema:Boolean {
+                $propertyInfo['type'] = 'boolean'
+            }
+            schema:Integer {
+                $propertyInfo['type'] = 'integer'
+            }
+            schema:Number {
+                $propertyInfo['type'] = 'number'
+            }
+        }
+    }
+    if ($rdfProperty.'rdfs:comment') {
+        $propertyInfo['description'] = $rdfProperty.'rdfs:comment'
+    }
+    $propertyName = $rdfProperty.'@id' -replace '^schema:'
+    $jsonSchema.properties[$propertyName] = $propertyInfo
+}
+$jsonSchema
+
