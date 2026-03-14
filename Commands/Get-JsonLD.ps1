@@ -8,7 +8,7 @@ function Get-JsonLD {
         This is a format used by many websites to provide structured data about their content.
     .EXAMPLE
         # Want to get information about a movie?  Linked Data to the rescue!
-        Get-JsonLD -Url https://letterboxd.com/film/amelie/    
+        Get-JsonLD -Url https://letterboxd.com/film/amelie/
     .EXAMPLE
         # Want information about an article?  Lots of news sites use this format.
         Get-JsonLD https://www.thebulwark.com/p/mahmoud-khalil-immigration-detention-first-amendment-free-speech-rights    
@@ -37,8 +37,7 @@ function Get-JsonLD {
     |script|the script tag|
     |xml|the script tag, as xml|
     
-    #>
-
+    #>    
     [ValidateSet('html', 'json', 'jsonld', 'ld', 'linkedData', 'script', 'xml')]
     [string]
     $as = 'jsonld',
@@ -71,9 +70,85 @@ application/ld\+json                          # The type that indicates linked d
         if (-not $script:Cache) {
             $script:Cache = [Ordered]@{}
         }
+
+        filter output {
+            $in = $_
+            $mySelf = $MyInvocation.MyCommand
+            if ($in.'@context' -is [string]) {
+                $context  = $in.'@context'
+            }
+            if ($in.'@graph') {
+                if ($in.pstypenames -ne 'application/ld+json') {
+                    $in.pstypenames.insert(0,'application/ld+json')
+                }
+                foreach ($graphObject in $in.'@graph') {
+                    $null = $graphObject |
+                        & $mySelf
+                }
+            }
+            elseif ($in.'@type') {
+
+                $typeName = if ($context) {
+                    $context, $in.'@type' -join '/'
+                } else {
+                    $in.'@type'
+                }
+
+                if ($in.pstypenames -ne 'application/ld+json') {
+                    $in.pstypenames.insert(0,'application/ld+json')
+                }
+                if ($in.pstypenames -ne $typeName) {
+                    $in.pstypenames.insert(0,$typeName)
+                }
+
+                foreach ($property in $in.psobject.properties) {
+                    if ($property.value.'@type') {
+                        $null = $property.value |
+                            & $mySelf
+                    }                    
+                }                                
+            }
+            $in
+        }
+
+        $foreachFile = {
+            $inFile = $_.FullName
+            try {
+                
+                Get-Content -LiteralPath $_.FullName -Raw | 
+                    ConvertFrom-Json |
+                        output
+            } catch {
+                Write-Verbose "$($inFile.FullName) : $_"
+            }
+        }
     }
 
     process {        
+        if ($url.IsFile -or 
+            -not $url.AbsoluteUri
+        ) {
+            if (Test-Path $url.OriginalString) {
+                Get-ChildItem $url.OriginalString -File |
+                    Foreach-Object $foreachFile
+            } elseif ($MyInvocation.MyCommand.Module -and 
+                (Test-Path (
+                    Join-Path (
+                        $MyInvocation.MyCommand.Module | Split-Path
+                    ) $url.OriginalString
+                ))
+            ) {
+                Get-ChildItem -Path (
+                    Join-Path (
+                        $MyInvocation.MyCommand.Module | Split-Path
+                    ) $url.OriginalString  
+                ) -File |
+                    Foreach-Object $foreachFile
+            }
+            
+            return
+        }
+            
         $restResponse = 
             if ($Force -or -not $script:Cache[$url]) {
                 $script:Cache[$url] = Invoke-RestMethod -Uri $Url
@@ -84,8 +159,7 @@ application/ld\+json                          # The type that indicates linked d
 
         if ($as -eq 'html') {
             return $restResponse
-        }
-        
+        }                
         
         # Find all linked data tags within the response
         foreach ($match in $linkedDataRegex.Matches("$restResponse")) {
@@ -119,28 +193,15 @@ application/ld\+json                          # The type that indicates linked d
                 $match.Groups['JsonContent'].Value | 
                     ConvertFrom-Json
             ) {
-                # If there was a `@type` property
-                if ($jsonObject.'@type') {
-                    # all we need to do is decorate the object
-                    # If we combine the `@context` and `@type` property, we should have a schema url 
-                    $schemaType = $jsonObject.'@context',$jsonObject.'@type' -ne '' -join '/'
-                    # and we can make that the typename
-                    $jsonObject.pstypenames.insert(0, $schemaType)
-                    # and show the object.
-                    $jsonObject
-                }
-                # If there was a `@graph` property
-                elseif ($jsonObject.'@graph') {
-                    # we can display all items in the graph
-                    foreach ($graphObject in $jsonObject.'@graph') {
-                        # each of them will tell us it's `@type`
-                        if ($graphObject.'@type') {
-                            # and we can decorate each object appropriately
-                            $graphObject.pstypenames.insert(0, $graphObject.'@type')
-                        }
-                        $graphObject
-                    }                    
-                }
+                # If there was a `@type` or `@graph` property
+                if (
+                    $jsonObject.'@type' -or 
+                    $jsonObject.'@graph'
+                ) {
+                    # output the object as jsonld
+                    $jsonObject | output
+                    continue                    
+                }                
                 # If there is neither a `@type` or a `@graph`
                 else {
                     # just output the object.
