@@ -11,6 +11,7 @@ describe 'JSON-LD' {
         }
         it 'can get information a schema' {
             Get-JsonLD https://schema.org/Movie | 
+                Select-Object -ExpandProperty '@graph' |
                 Select-Object -ExpandProperty pstypenames -Unique | 
                 Should -Contain 'rdf:Property'            
         }         
