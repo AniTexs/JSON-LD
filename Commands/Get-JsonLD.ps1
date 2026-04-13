@@ -22,7 +22,7 @@ function Get-JsonLD {
     param(
     # The URL that may contain JSON-LD data
     [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
-    [Alias('href')]
+    [Alias('href', 'Uri')]
     [Uri]
     $Url,
 
