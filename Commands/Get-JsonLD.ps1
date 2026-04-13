@@ -222,7 +222,7 @@ application/ld\+json                          # The type that indicates linked d
                 }
         }
         catch {
-            Write-Error -Message "Failed to retrieve JSON-LD from '$Url'. $($_.Exception.Message)" -ErrorRecord $_
+            Write-Error -Message "Failed to retrieve JSON-LD from '$Url'. $($_.Exception.Message)" -Exception $_.Exception -Category $_.CategoryInfo.Category -TargetObject $_.TargetObject
             return
         }
 
