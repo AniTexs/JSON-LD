@@ -17,16 +17,16 @@ function Get-JsonLD {
         jsonld https://schema.org/Movie
         # Get-JSONLD will output the contents of a `@Graph` object if no `@type` is found.        
     #>
-    [Alias('jsonLD','json-ld')]
+    [Alias('jsonLD', 'json-ld')]
     [CmdletBinding()]
     param(
-    # The URL that may contain JSON-LD data
-    [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
-    [Alias('href', 'Uri')]
-    [Uri]
-    $Url,
+        # The URL that may contain JSON-LD data
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
+        [Alias('href', 'Uri')]
+        [Uri]
+        $Url,
 
-    <#
+        <#
     
     If set, will the output as:
 
@@ -39,36 +39,36 @@ function Get-JsonLD {
     |xml|the script tag, as xml|
     
     #>    
-    [ValidateSet('html', 'json', 'jsonld', 'ld', 'linkedData', 'script', 'xml')]
-    [string]
-    $as = 'jsonld',
+        [ValidateSet('html', 'json', 'jsonld', 'ld', 'linkedData', 'script', 'xml')]
+        [string]
+        $as = 'jsonld',
 
-    [switch]
-    $RawHtml,
+        [switch]
+        $RawHtml,
 
-    # If set, bypasses certificate validation for HTTPS requests.
-    [switch]
-    $SkipCertificateCheck,
+        # If set, bypasses certificate validation for HTTPS requests.
+        [switch]
+        $SkipCertificateCheck,
 
-    # Authentication mechanism to pass directly to Invoke-RestMethod.
-    [Microsoft.PowerShell.Commands.WebAuthenticationType]
-    $Authentication,
+        # Authentication mechanism to pass directly to Invoke-RestMethod.
+        [Microsoft.PowerShell.Commands.WebAuthenticationType]
+        $Authentication,
 
-    # User agent string to pass directly to Invoke-RestMethod.
-    [string]
-    $UserAgent,
+        # User agent string to pass directly to Invoke-RestMethod.
+        [string]
+        $UserAgent,
 
-    # Headers to pass directly to Invoke-RestMethod.
-    [Collections.IDictionary]
-    $Headers,
+        # Headers to pass directly to Invoke-RestMethod.
+        [Collections.IDictionary]
+        $Headers,
 
-    # If set, ignores the cached response and forces a fresh request.
-    [switch]
-    $IgnoreCache,
+        # If set, ignores the cached response and forces a fresh request.
+        [switch]
+        $IgnoreCache,
 
-    # If set, will force the request to be made even if the URL has already been cached.
-    [switch]
-    $Force
+        # If set, will force the request to be made even if the URL has already been cached.
+        [switch]
+        $Force
     )
 
     begin {
@@ -87,7 +87,7 @@ application/ld\+json                          # The type that indicates linked d
 \>                                            # Match the end of the start tag
 (?<JsonContent>(?:.|\s){0,}?(?=\z|</script>)) # Anything until the end tag is JSONContent
 )        
-'@, 'IgnoreCase,IgnorePatternWhitespace','00:00:00.1')
+'@, 'IgnoreCase,IgnorePatternWhitespace', '00:00:00.1')
 
         # Initialize the cache for JSON-LD requests
         if (-not $script:Cache) {
@@ -99,11 +99,11 @@ application/ld\+json                          # The type that indicates linked d
             $in = $_
             $shouldOutput = $true
             if ($in.'@context' -is [string]) {
-                $context  = $in.'@context'
+                $context = $in.'@context'
             }
             if ($in.'@graph') {
                 if ($in.pstypenames -ne 'application/ld+json') {
-                    $in.pstypenames.insert(0,'application/ld+json')
+                    $in.pstypenames.insert(0, 'application/ld+json')
                 }
                 foreach ($graphObject in $in.'@graph') {
                     $graphObject | output
@@ -115,15 +115,16 @@ application/ld\+json                          # The type that indicates linked d
 
                 $typeName = if ($context) {
                     $context, $in.'@type' -join '/'
-                } else {
+                }
+                else {
                     $in.'@type'
                 }
 
                 if ($in.pstypenames -ne 'application/ld+json') {
-                    $in.pstypenames.insert(0,'application/ld+json')
+                    $in.pstypenames.insert(0, 'application/ld+json')
                 }
                 if ($in.pstypenames -ne $typeName) {
-                    $in.pstypenames.insert(0,$typeName)
+                    $in.pstypenames.insert(0, $typeName)
                 }
 
                 foreach ($property in $in.psobject.properties) {
@@ -144,9 +145,10 @@ application/ld\+json                          # The type that indicates linked d
                 Write-Verbose "Reading JSON-LD from file: $inFile"
                 
                 Get-Content -LiteralPath $_.FullName -Raw | 
-                    ConvertFrom-Json |
-                        output
-            } catch {
+                ConvertFrom-Json |
+                output
+            }
+            catch {
                 Write-Warning "Could not parse JSON-LD content from file: $inFile"
                 Write-Debug "File parse error for '$inFile': $($_.Exception.Message)"
             }
@@ -161,9 +163,30 @@ application/ld\+json                          # The type that indicates linked d
             if (-not $InputObject) { return $false }
 
             $propertyNames = @($InputObject.psobject.properties.Name)
-            ($propertyNames -contains '@context') -or
-            ($propertyNames -contains '@type') -or
-            ($propertyNames -contains '@graph')
+            if (
+                ($propertyNames -contains '@context') -or
+                ($propertyNames -contains '@type') -or
+                ($propertyNames -contains '@graph')
+            ) {
+                return $true
+            }
+            if (
+                $InputObject -is [System.Collections.IEnumerable] -and
+                $InputObject -isnot [string]
+            ) {
+                foreach ($item in $InputObject) {
+                    if (-not $item) { continue }
+                    $itemPropertyNames = @($item.psobject.properties.Name)
+                    if (
+                        ($itemPropertyNames -contains '@context') -or
+                        ($itemPropertyNames -contains '@type') -or
+                        ($itemPropertyNames -contains '@graph')
+                    ) {
+                        return $true
+                    }
+                }
+            }
+            return $false
         }
 
         if ($url.IsFile -or 
@@ -172,8 +195,9 @@ application/ld\+json                          # The type that indicates linked d
             if (Test-Path $url.OriginalString) {
                 Write-Verbose "Reading JSON-LD from local path: $($url.OriginalString)"
                 Get-ChildItem $url.OriginalString -File |
-                    Foreach-Object $foreachFile
-            } elseif ($MyInvocation.MyCommand.Module -and 
+                Foreach-Object $foreachFile
+            }
+            elseif ($MyInvocation.MyCommand.Module -and 
                 (Test-Path (
                     Join-Path (
                         $MyInvocation.MyCommand.Module | Split-Path
@@ -186,8 +210,9 @@ application/ld\+json                          # The type that indicates linked d
                         $MyInvocation.MyCommand.Module | Split-Path
                     ) $url.OriginalString  
                 ) -File |
-                    Foreach-Object $foreachFile
-            } else {
+                Foreach-Object $foreachFile
+            }
+            else {
                 Write-Warning "Path not found for URL/file input: $($url.OriginalString)"
             }
             
@@ -212,14 +237,15 @@ application/ld\+json                          # The type that indicates linked d
 
         try {
             $restResponse = 
-                if ($Force -or $IgnoreCache -or -not $script:Cache[$url]) {
-                    Write-Verbose "Fetching fresh response from remote URL"
-                    $script:Cache[$url] = Invoke-RestMethod @invokeRestMethodSplat
-                    $script:Cache[$url]
-                } else {
-                    Write-Verbose "Using cached response"
-                    $script:Cache[$url]
-                }
+            if ($Force -or $IgnoreCache -or -not $script:Cache[$url]) {
+                Write-Verbose "Fetching fresh response from remote URL"
+                $script:Cache[$url] = Invoke-RestMethod @invokeRestMethodSplat
+                $script:Cache[$url]
+            }
+            else {
+                Write-Verbose "Using cached response"
+                $script:Cache[$url]
+            }
         }
         catch {
             Write-Error -Message "Failed to retrieve JSON-LD from '$Url'. $($_.Exception.Message)" -Exception $_.Exception -Category $_.CategoryInfo.Category -TargetObject $_.TargetObject
@@ -249,16 +275,13 @@ application/ld\+json                          # The type that indicates linked d
                 return $restResponse | ConvertTo-Json -Depth 100
             }
 
-            $jsonLdObjects = if ($restResponse -is [System.Collections.IEnumerable] -and -not ($restResponse -is [string])) {
-                @($restResponse)
-            } else {
-                @($restResponse)
-            }
+            $jsonLdObjects = @($restResponse)
 
             foreach ($jsonObject in $jsonLdObjects) {
                 if ($jsonObject.'@type' -or $jsonObject.'@graph') {
                     $jsonObject | output
-                } else {
+                }
+                else {
                     $jsonObject
                 }
             }
@@ -290,7 +313,8 @@ application/ld\+json                          # The type that indicates linked d
                     foreach ($jsonObject in @($parsedJson)) {
                         if ($jsonObject.'@type' -or $jsonObject.'@graph') {
                             $jsonObject | output
-                        } else {
+                        }
+                        else {
                             $jsonObject
                         }
                     }
@@ -315,12 +339,13 @@ application/ld\+json                          # The type that indicates linked d
             # If we want the result as xml
             if ($As -eq 'xml') {
                 # try to cast it
-                $matchXml ="$match" -as [xml]
+                $matchXml = "$match" -as [xml]
                 if ($matchXml) {
                     # and output it if found.
                     $matchXml
                     continue
-                } else {
+                }
+                else {
                     # otherwise, fall back to the `<script>` tag
                     Write-Warning "Could not cast matched JSON-LD script tag to XML; returning script tag instead"
                     $As = 'script'
