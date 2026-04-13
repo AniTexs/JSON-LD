@@ -43,15 +43,15 @@ function Get-JsonLD {
         [string]
         $as = 'jsonld',
 
-        [switch]
-        $RawHtml,
-
         # If set, bypasses certificate validation for HTTPS requests.
         [switch]
         $SkipCertificateCheck,
 
         # Authentication mechanism to pass directly to Invoke-RestMethod.
-        [Microsoft.PowerShell.Commands.WebAuthenticationType]
+        # Use a version-agnostic type here so the function can be imported on
+        # PowerShell versions where WebAuthenticationType is unavailable.
+        [ValidateSet('None', 'Basic', 'Bearer', 'OAuth')]
+        [string]
         $Authentication,
 
         # User agent string to pass directly to Invoke-RestMethod.
@@ -97,12 +97,13 @@ application/ld\+json                          # The type that indicates linked d
 
         filter output {
             $in = $_
+            $context = $null
             $shouldOutput = $true
             if ($in.'@context' -is [string]) {
                 $context = $in.'@context'
             }
             if ($in.'@graph') {
-                if ($in.pstypenames -ne 'application/ld+json') {
+                if ($in.pstypenames -notcontains 'application/ld+json') {
                     $in.pstypenames.insert(0, 'application/ld+json')
                 }
                 foreach ($graphObject in $in.'@graph') {
@@ -120,10 +121,10 @@ application/ld\+json                          # The type that indicates linked d
                     $in.'@type'
                 }
 
-                if ($in.pstypenames -ne 'application/ld+json') {
+                if ($in.pstypenames -notcontains 'application/ld+json') {
                     $in.pstypenames.insert(0, 'application/ld+json')
                 }
-                if ($in.pstypenames -ne $typeName) {
+                if ($in.pstypenames -notcontains $typeName) {
                     $in.pstypenames.insert(0, $typeName)
                 }
 
@@ -257,27 +258,27 @@ application/ld\+json                          # The type that indicates linked d
             return $restResponse
         }
 
-        # Handle API responses where the body is already JSON-LD (not embedded in HTML).
-        if (& $isJsonLdObject $restResponse) {
-            Write-Verbose "Detected direct JSON-LD object response"
+        $emitDirectJsonLdResponse = {
+            param(
+                [Parameter(Mandatory)]
+                $JsonLdResponse
+            )
 
             if ($As -eq 'xml') {
                 Write-Warning "XML output is not available for direct JSON-LD API responses; returning JSON instead"
-                return $restResponse | ConvertTo-Json -Depth 100
+                return $JsonLdResponse | ConvertTo-Json -Depth 100
             }
 
             if ($As -eq 'script') {
                 Write-Warning "Script output is not available for direct JSON-LD API responses; returning JSON instead"
-                return $restResponse | ConvertTo-Json -Depth 100
+                return $JsonLdResponse | ConvertTo-Json -Depth 100
             }
 
             if ($As -eq 'json') {
-                return $restResponse | ConvertTo-Json -Depth 100
+                return $JsonLdResponse | ConvertTo-Json -Depth 100
             }
 
-            $jsonLdObjects = @($restResponse)
-
-            foreach ($jsonObject in $jsonLdObjects) {
+            foreach ($jsonObject in @($JsonLdResponse)) {
                 if ($jsonObject.'@type' -or $jsonObject.'@graph') {
                     $jsonObject | output
                 }
@@ -285,7 +286,12 @@ application/ld\+json                          # The type that indicates linked d
                     $jsonObject
                 }
             }
+        }
 
+        # Handle API responses where the body is already JSON-LD (not embedded in HTML).
+        if (& $isJsonLdObject $restResponse) {
+            Write-Verbose "Detected direct JSON-LD object response"
+            & $emitDirectJsonLdResponse $restResponse
             return
         }
 
@@ -295,30 +301,7 @@ application/ld\+json                          # The type that indicates linked d
                 $parsedJson = $restResponse | ConvertFrom-Json -ErrorAction Stop
                 if (& $isJsonLdObject $parsedJson) {
                     Write-Verbose "Detected direct JSON-LD text response"
-
-                    if ($As -eq 'xml') {
-                        Write-Warning "XML output is not available for direct JSON-LD API responses; returning JSON instead"
-                        return $parsedJson | ConvertTo-Json -Depth 100
-                    }
-
-                    if ($As -eq 'script') {
-                        Write-Warning "Script output is not available for direct JSON-LD API responses; returning JSON instead"
-                        return $parsedJson | ConvertTo-Json -Depth 100
-                    }
-
-                    if ($As -eq 'json') {
-                        return $parsedJson | ConvertTo-Json -Depth 100
-                    }
-
-                    foreach ($jsonObject in @($parsedJson)) {
-                        if ($jsonObject.'@type' -or $jsonObject.'@graph') {
-                            $jsonObject | output
-                        }
-                        else {
-                            $jsonObject
-                        }
-                    }
-
+                    & $emitDirectJsonLdResponse $parsedJson
                     return
                 }
             }
